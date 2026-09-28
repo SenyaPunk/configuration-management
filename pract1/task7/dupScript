@@ -1,0 +1,8 @@
+#!/bin/bash
+shopt -s nullglob globstar
+
+for i in **/*; do
+    if [ -f "$i" ]; then
+        md5sum "$i"
+    fi
+done | sort | uniq -w32 -D | tr -s ' ' | cut -d' ' -f2 | tr -d '*'

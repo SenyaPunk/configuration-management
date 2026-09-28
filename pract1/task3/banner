@@ -1,0 +1,16 @@
+#!/bin/bash
+
+textOfFrame="$*"
+lenOfFrame=$((${#textOfFrame} + 2))
+
+print_border() {
+    printf "+"
+    for ((i = 0; i < lenOfFrame; i++)); do
+        printf "-"
+    done
+    printf "+\n"
+}
+
+print_border
+printf "| %s |\n" "$textOfFrame"
+print_border

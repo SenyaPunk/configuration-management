@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vfs>
+  <file name="hello.txt">Привет из VFS!</file>
+  <file name=".hidden">hidden</file>
+  <file name="image.bin" encoding="base64">AAEC/w==</file>
+  <directory name="folder name">
+    <file name="info.txt">A file inside a directory</file>
+  </directory>
+</vfs>

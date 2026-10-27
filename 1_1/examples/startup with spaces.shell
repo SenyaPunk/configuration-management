@@ -1,5 +1,5 @@
 # Проверка путей с пробелами и завершения из стартового скрипта.
-ls "argument with spaces"
-cd "$USERPROFILE"
+ls "folder name"
+cd "folder name"
 exit
 ls THIS_MUST_NOT_RUN_AFTER_EXIT

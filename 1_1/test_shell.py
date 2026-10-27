@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from shell import (
     Config, ConfigurationError, StartupScriptError, execute_command, parse_command,
-    parse_config, ParseError, run_startup_script, window_title,
+    parse_config, ParseError, run_startup_script, window_title, VirtualFileSystem,
 )
 
 
@@ -64,16 +64,15 @@ class ParserTests(unittest.TestCase):
 
 
 class CommandTests(unittest.TestCase):
-    def test_stubs_print_name_and_arguments(self):
-        for command in ("ls", "cd"):
-            with self.subTest(command=command):
-                result = execute_command(f'{command} -a "a b"')
-                self.assertEqual(result.output, f"{command}: аргументы = ['-a', 'a b']")
-                self.assertFalse(result.error)
-                self.assertFalse(result.should_exit)
-                self.assertEqual(execute_command(command).output, f"{command}: аргументы = []")
+    def test_ls_and_cd_use_vfs(self):
+        fs = VirtualFileSystem()
+        fs.nodes.update({"/a b": None, "/a b/test.txt": b"test"})
+        self.assertEqual(execute_command("ls", fs).output, "a b/")
+        self.assertFalse(execute_command('cd "a b"', fs).error)
+        self.assertEqual(fs.cwd, "/a b")
+        self.assertEqual(execute_command("ls", fs).output, "test.txt")
 
-    def test_cd_stub_does_not_change_real_directory(self):
+    def test_cd_does_not_change_real_directory(self):
         before = Path.cwd()
         execute_command("cd /does/not/exist")
         self.assertEqual(Path.cwd(), before)
@@ -121,14 +120,14 @@ class ConfigurationTests(unittest.TestCase):
         self.assertIn(str(config.vfs_path), config.debug_output())
         self.assertIn(str(config.script_path), config.debug_output())
 
-    def test_vfs_accepts_existing_directory_or_file(self):
+    def test_vfs_requires_existing_file(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             archive = directory / "vfs.zip"
             archive.write_bytes(b"placeholder: mounting is a later stage")
-            for path in (directory, archive):
-                with self.subTest(path=path):
-                    Config(vfs_path=path).validate()
+            Config(vfs_path=archive).validate()
+            with self.assertRaises(ConfigurationError):
+                Config(vfs_path=directory).validate()
 
     def test_missing_vfs_is_configuration_error(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -178,16 +177,19 @@ class StartupScriptTests(unittest.TestCase):
     def test_comments_blank_lines_bom_and_environment(self):
         self.write_script('# Комментарий\n\n  # Ещё комментарий\nls "$STAGE2_TEST" # inline\ncd /tmp\n')
         with patch.dict(os.environ, {"STAGE2_TEST": "два слова"}):
-            steps = list(run_startup_script(self.path))
+            fs = VirtualFileSystem()
+            fs.nodes.update({"/два слова": b"", "/tmp": None})
+            steps = list(run_startup_script(self.path, fs))
         self.assertEqual([step.line_number for step in steps], [4, 5])
         self.assertEqual(steps[0].line, 'ls "$STAGE2_TEST" # inline')
-        self.assertEqual(steps[0].result.output, "ls: аргументы = ['два слова']")
-        self.assertEqual(steps[1].result.output, "cd: аргументы = ['/tmp']")
+        self.assertEqual(steps[0].result.output, "два слова")
+        self.assertEqual(steps[1].result.output, "")
+        self.assertEqual(fs.cwd, "/tmp")
 
     def test_stops_at_first_command_error(self):
         for error in ("unknown", 'ls "unfinished', "exit extra"):
             with self.subTest(error=error):
-                self.write_script(f"ls before\n{error}\nls after\n")
+                self.write_script(f"ls\n{error}\nls after\n")
                 steps = list(run_startup_script(self.path))
                 self.assertEqual(len(steps), 2)
                 self.assertEqual(steps[-1].line_number, 2)
@@ -222,6 +224,87 @@ class StartupScriptTests(unittest.TestCase):
         runner.close()
         self.path.unlink()
         self.assertFalse(self.path.exists())
+
+
+class VFSTests(unittest.TestCase):
+    fixtures = Path(__file__).parent / "examples" / "vfs"
+
+    def setUp(self):
+        self.fs = VirtualFileSystem.from_xml(self.fixtures / "deep.xml")
+
+    def command(self, line):
+        return execute_command(line, self.fs)
+
+    def test_binary_and_text_content(self):
+        self.assertEqual(self.fs.nodes["/image.bin"], b"\x00\x01\x02\xff")
+        self.assertEqual(self.fs.nodes["/hello.txt"], "Привет из VFS!".encode())
+        self.assertIn("     4 image.bin", self.command("ls -l image.bin").output)
+
+    def test_paths_and_previous_directory(self):
+        for line, cwd in [('cd /home/student/docs', '/home/student/docs'),
+                          ('cd ./empty/..', '/home/student/docs'),
+                          ('cd ..', '/home/student'), ('cd -', '/home/student/docs'),
+                          ('cd ../../../../..', '/'), ('cd "folder name"', '/folder name'),
+                          ('cd ~', '/'), ('cd', '/')]:
+            with self.subTest(line=line):
+                self.assertFalse(self.command(line).error)
+                self.assertEqual(self.fs.cwd, cwd)
+
+    def test_ls_modes(self):
+        self.assertNotIn(".hidden", self.command("ls").output)
+        self.assertIn(".hidden", self.command("ls -a").output)
+        self.assertIn("drwxr-xr-x", self.command("ls -al").output)
+        self.assertEqual(self.command("ls -la").output, self.command("ls -a -l").output)
+        self.assertEqual(self.command("ls -- hello.txt").output, "hello.txt")
+        self.assertIn("/home:", self.command('ls /home "folder name"').output)
+        self.assertEqual(self.command("ls /home/student/docs/empty").output, "")
+
+    def test_errors_preserve_cwd_and_handle_file_components(self):
+        for line in ('cd missing', 'cd hello.txt', 'cd / /home', 'ls -z',
+                     'ls hello.txt/..', 'ls hello.txt/.', 'ls hello.txt/', 'ls ""'):
+            with self.subTest(line=line):
+                self.assertTrue(self.command(line).error)
+                self.assertEqual(self.fs.cwd, "/")
+        result = self.command("ls missing hello.txt")
+        self.assertTrue(result.error)
+        self.assertIn("hello.txt", result.output)
+
+    def test_host_files_and_source_stay_unchanged(self):
+        path = self.fixtures / "deep.xml"
+        content, cwd = path.read_bytes(), Path.cwd()
+        for line in ("cd /home/student/docs", "ls -a", "cd /", "cd ../../.."):
+            self.command(line)
+        self.assertEqual(path.read_bytes(), content)
+        self.assertEqual(Path.cwd(), cwd)
+        self.assertTrue(self.command(f'ls "{Path(__file__).resolve()}"').error)
+
+    def test_invalid_xml_schema_and_base64(self):
+        invalid = ['<bad/>', '<vfs>', '<vfs><file name=".."/></vfs>',
+                   '<vfs><file name="a/b"/></vfs>',
+                   '<vfs><file name="a"/><directory name="a"/></vfs>',
+                   '<vfs><file name="x" encoding="base64">???</file></vfs>',
+                   '<vfs><file name="x" encoding="unknown"/></vfs>',
+                   '<vfs><link name="x"/></vfs>',
+                   '<!DOCTYPE vfs [<!ENTITY x "test">]><vfs/>']
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "invalid.xml"
+            for xml in invalid:
+                with self.subTest(xml=xml):
+                    path.write_text(xml, encoding="utf-8")
+                    with self.assertRaises(ConfigurationError):
+                        VirtualFileSystem.from_xml(path)
+
+    def test_all_fixture_scripts(self):
+        examples = self.fixtures.parent
+        for name, script in (("minimal.xml", "minimal.shell"),
+                             ("several files.xml", "files.shell"), ("deep.xml", "all_commands.shell")):
+            with self.subTest(name=name), patch.dict(os.environ, {"VFS_DEMO_FILE": "hello.txt"}):
+                fs = VirtualFileSystem.from_xml(self.fixtures / name)
+                steps = list(run_startup_script(examples / script, fs, continue_on_error=True))
+                self.assertTrue(steps[-1].result.should_exit)
+                errors = [step for step in steps if step.result.error]
+                self.assertEqual(len(errors), 11 if name == "deep.xml" else 0)
+                self.assertNotIn("unknown_after_exit", [step.line for step in steps])
 
 
 if __name__ == "__main__":

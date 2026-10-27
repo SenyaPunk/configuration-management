@@ -1,0 +1,9 @@
+# Несколько файлов, скрытый файл, base64 и путь с пробелами.
+ls
+ls -al
+ls -l image.bin
+cd "folder name"
+ls info.txt
+cd -
+ls hello.txt
+exit

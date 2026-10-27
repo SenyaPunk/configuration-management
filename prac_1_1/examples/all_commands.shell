@@ -1,0 +1,44 @@
+# Запускать с deep.xml и --continue-on-error.
+# ls: без аргументов, ключи отдельно и вместе, файл, несколько путей, --.
+ls
+ls -a
+ls -l
+ls -al /
+ls -a -l /
+ls hello.txt image.bin
+ls /home "/folder name"
+ls -- hello.txt
+# cd: абсолютный/относительный путь, точка, родитель, предыдущий, корень.
+cd /home/student/docs
+ls . ..
+cd empty
+ls
+cd ..
+cd -
+cd /
+cd "folder name"
+ls info.txt
+cd .
+cd ../../../../..
+cd
+cd ~
+# Переменные реальной ОС раскрываются внутри пути VFS.
+ls "$VFS_DEMO_FILE" # CMD-сценарий задаёт hello.txt.
+ls ${VFS_DEMO_FILE}
+# Ошибки: путь, тип узла, опции, число аргументов, синтаксис, команда.
+ls missing
+cd hello.txt
+cd missing
+ls hello.txt/..
+ls -z
+cd / /home
+ls '$VFS_DEMO_FILE'
+ls \$VFS_DEMO_FILE
+ls "unfinished
+unknown
+exit extra
+# После ошибок команды снова работают; exit останавливает скрипт.
+cd /home/student/docs
+ls -la
+exit
+unknown_after_exit

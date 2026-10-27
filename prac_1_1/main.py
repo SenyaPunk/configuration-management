@@ -4,15 +4,17 @@ import tkinter as tk
 from tkinter.scrolledtext import ScrolledText
 
 from shell import (
-    CommandResult, Config, ConfigurationError, ScriptStep, StartupScriptError,
+    CommandResult, Config, ConfigurationError, ScriptStep, StartupScriptError, VirtualFileSystem,
     execute_command, parse_config, run_startup_script, system_identity, window_title,
 )
 
 
 class ShellApp:
-    def __init__(self, root: tk.Tk, config: Config | None = None) -> None:
+    def __init__(self, root: tk.Tk, config: Config | None = None, vfs: VirtualFileSystem | None = None) -> None:
         self.root = root
         self.config = config if config is not None else Config()
+        self.vfs = vfs if vfs is not None else VirtualFileSystem.from_xml(self.config.vfs_path)
+        self.identity = system_identity()
         self.script: Generator[ScriptStep, None, None] | None = None
         self.script_running = False
         self.exit_code = 0
@@ -42,8 +44,8 @@ class ShellApp:
 
         row = tk.Frame(root, bg="#172331", padx=16, pady=14)
         row.pack(fill="x")
-        self.prompt = f"{system_identity()}:~$ "
-        tk.Label(row, text=self.prompt, bg="#172331", fg="#77d9bd",
+        self.prompt_text = tk.StringVar(value=self.prompt)
+        tk.Label(row, textvariable=self.prompt_text, bg="#172331", fg="#77d9bd",
                  font=("Consolas", 12)).pack(side="left")
         self.entry = tk.Entry(
             row, bg="#233448", fg="white", insertbackground="white",
@@ -59,16 +61,22 @@ class ShellApp:
         )
         self.run_button.pack(side="left", padx=(10, 0))
         self.write("Минимальный эмулятор командной оболочки.\n", "hint")
-        self.write("Команды: ls, cd (заглушки), exit. Ввод: Enter; история: ↑ / ↓.\n", "hint")
+        self.write("Команды: ls [-a] [-l] [пути], cd [путь|-], exit. История: ↑ / ↓.\n", "hint")
         self.write("Переменные: $NAME, ${NAME}. Кавычки: '...' и \"...\".\n\n", "hint")
         self.write(self.config.debug_output() + "\n", "hint")
         self.entry.focus_set()
         if self.config.script_path is not None:
-            self.script = run_startup_script(self.config.script_path)
+            self.script = run_startup_script(
+                self.config.script_path, self.vfs, self.config.continue_on_error,
+            )
             self.script_running = True
             self.entry.configure(state="disabled")
             self.run_button.configure(state="disabled")
             self.root.after(100, self.run_script_step)
+
+    @property
+    def prompt(self) -> str:
+        return f"{self.identity}:{self.vfs.cwd}$ "
 
     def write(self, text: str, tag: str = "") -> None:
         self.output.configure(state="normal")
@@ -81,16 +89,18 @@ class ShellApp:
             return "break"
         line = self.entry.get()
         self.entry.delete(0, "end")
-        result = execute_command(line)
-        self.show_command(line, result)
+        prompt = self.prompt
+        result = execute_command(line, self.vfs)
+        self.show_command(line, result, prompt)
         if result.should_exit:
             self.close()
         else:
             self.entry.focus_set()
         return "break"
 
-    def show_command(self, line: str, result: CommandResult) -> None:
-        self.write(self.prompt + line + "\n", "prompt")
+    def show_command(self, line: str, result: CommandResult, prompt: str) -> None:
+        self.write(prompt + line + "\n", "prompt")
+        self.prompt_text.set(self.prompt)
         if line.strip():
             self.history.append(line)
         self.history_index = len(self.history)
@@ -101,6 +111,7 @@ class ShellApp:
     def run_script_step(self) -> None:
         if self.script is None:
             return
+        prompt = self.prompt
         try:
             step = next(self.script)
         except StopIteration:
@@ -112,14 +123,18 @@ class ShellApp:
             self.write(f"Ошибка: {exc}\n", "error")
             self.finish_script()
             return
-        self.show_command(step.line, step.result)
+        self.show_command(step.line, step.result, prompt)
         if step.result.error:
             self.exit_code = 1
             self.write(
                 f'Стартовый скрипт "{self.config.script_path}", '
-                f"строка {step.line_number}: выполнение остановлено.\n\n", "error",
+                f"строка {step.line_number}: "
+                f"{'выполнение продолжается' if self.config.continue_on_error else 'выполнение остановлено'}.\n\n", "error",
             )
-            self.finish_script()
+            if self.config.continue_on_error:
+                self.root.after(100, self.run_script_step)
+            else:
+                self.finish_script()
         elif step.result.should_exit:
             self.close()
         else:
@@ -159,12 +174,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(config.debug_output(), flush=True)
     try:
         config.validate()
+        vfs = VirtualFileSystem.from_xml(config.vfs_path)
     except ConfigurationError as exc:
         if sys.stderr is not None:
             print(f"Ошибка конфигурации: {exc}", file=sys.stderr)
         return 2
     root = tk.Tk()
-    app = ShellApp(root, config)
+    app = ShellApp(root, config, vfs)
     root.mainloop()
     return app.exit_code
 

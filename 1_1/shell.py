@@ -1,15 +1,66 @@
-"""Parsing and command dispatch for the stage 1 shell emulator."""
-
-from collections.abc import Mapping
+import argparse
+from collections.abc import Generator, Mapping, Sequence
 from dataclasses import dataclass
 import getpass
 import os
+from pathlib import Path
 import re
 import socket
 
 
 class ParseError(ValueError):
-    """The input is outside the supported shell syntax."""
+    """ошибочка"""
+
+
+class ConfigurationError(ValueError):
+    pass
+
+
+class StartupScriptError(ValueError):
+    pass
+
+
+@dataclass(frozen=True)
+class Config:
+    vfs_path: Path | None = None
+    script_path: Path | None = None
+
+    def debug_output(self) -> str:
+        return (
+            "Конфигурация запуска:\n"
+            f"  VFS (--vfs): {self.vfs_path if self.vfs_path is not None else 'не задан'}\n"
+            f"  Стартовый скрипт (--script): "
+            f"{self.script_path if self.script_path is not None else 'не задан'}\n"
+        )
+
+    def validate(self) -> None:
+        if self.vfs_path is None:
+            return
+        try:
+            if not self.vfs_path.exists():
+                raise ConfigurationError(f'путь VFS не существует: "{self.vfs_path}"')
+            if not (self.vfs_path.is_file() or self.vfs_path.is_dir()):
+                raise ConfigurationError(f'VFS должна быть файлом или каталогом: "{self.vfs_path}"')
+        except OSError as exc:
+            raise ConfigurationError(f'не удалось проверить VFS "{self.vfs_path}": {exc}') from exc
+
+
+def parse_config(argv: Sequence[str] | None = None) -> Config:
+    def physical_path(value: str) -> Path:
+        if not value.strip():
+            raise argparse.ArgumentTypeError("путь не может быть пустым")
+        try:
+            return Path(value).expanduser().resolve()
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise argparse.ArgumentTypeError(f"некорректный путь: {exc}") from exc
+
+    parser = argparse.ArgumentParser(description="Эмулятор UNIX-подобной оболочки. Этап 2.")
+    parser.add_argument("--vfs", type=physical_path, metavar="PATH",
+                        help="физический путь VFS (на этом этапе без загрузки содержимого)")
+    parser.add_argument("--script", type=physical_path, metavar="PATH",
+                        help="стартовый скрипт команд эмулятора в UTF-8; комментарии начинаются с #")
+    args = parser.parse_args(argv)
+    return Config(vfs_path=args.vfs, script_path=args.script)
 
 
 _NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
@@ -17,11 +68,7 @@ _SPACE = " \t\n"
 
 
 def parse_command(line: str, environ: Mapping[str, str] | None = None) -> list[str]:
-    """Split a command, respecting quotes, escapes and environment expansion.
 
-    Unquoted expansions split on spaces, tabs and newlines. Expanded text is
-    never interpreted again as shell syntax. No processes are executed.
-    """
     env = os.environ if environ is None else environ
     words: list[str] = []
     word: list[str] = []
@@ -122,7 +169,6 @@ def parse_command(line: str, environ: Mapping[str, str] | None = None) -> list[s
 
 
 def system_identity() -> str:
-    """Read the current real OS user and hostname."""
     return f"{getpass.getuser()}@{socket.gethostname()}"
 
 
@@ -138,7 +184,6 @@ class CommandResult:
 
 
 def execute_command(line: str) -> CommandResult:
-    """Handle one REPL iteration without touching the real filesystem."""
     try:
         words = parse_command(line)
     except ParseError as exc:
@@ -153,3 +198,26 @@ def execute_command(line: str) -> CommandResult:
             return CommandResult("exit: команда не принимает аргументы", error=True)
         return CommandResult("Завершение работы.", should_exit=True)
     return CommandResult(f"{command}: команда не найдена", error=True)
+
+
+@dataclass(frozen=True)
+class ScriptStep:
+    line_number: int
+    line: str
+    result: CommandResult
+
+
+def run_startup_script(path: Path) -> Generator[ScriptStep, None, None]:
+    """Execute emulator commands line by line; stop at the first error or exit."""
+    try:
+        with path.open(encoding="utf-8-sig") as script:
+            for number, raw_line in enumerate(script, start=1):
+                line = raw_line.rstrip("\r\n")
+                if not line.strip() or line.lstrip().startswith("#"):
+                    continue
+                result = execute_command(line)
+                yield ScriptStep(number, line, result)
+                if result.error or result.should_exit:
+                    return
+    except (OSError, UnicodeError) as exc:
+        raise StartupScriptError(f'не удалось прочитать стартовый скрипт "{path}": {exc}') from exc

@@ -5,8 +5,9 @@ __pycache__/
 venv/
 env/
 *.egg-info/
-graph.svg
+*.svg
 coverage.xml
 htmlcov/
 .idea/
 .vscode/
+

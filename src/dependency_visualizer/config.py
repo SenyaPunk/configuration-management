@@ -90,12 +90,13 @@ def load_config(path: Path) -> Config:
         raise ConfigError("repository не может быть пустым")
     if not values["version"]:
         raise ConfigError("version не может быть пустым")
-    if values["test_mode"] and not Path(repository).is_absolute():
+    test_mode = _boolean(values["test_mode"], "test_mode")
+    if test_mode and not Path(repository).is_absolute():
         repository = str((path.parent / repository).resolve())
     return Config(
         _validate_name(values["package"]),
         repository,
-        _boolean(values["test_mode"], "test_mode"),
+        test_mode,
         values["version"],
         _boolean(values["ascii_tree"], "ascii_tree"),
         _positive_depth(values["max_depth"]),

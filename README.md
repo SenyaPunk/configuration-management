@@ -53,12 +53,16 @@ python -m unittest discover -s tests -v
 пакет `D` и цикл `D->A`.
 
 ```text
-python -m src.dependency_visualizer --config examples\test-config.csv \
+python -m src.dependency_visualizer --config examples\config-a.csv \
   --output graph-a.svg
-python -m src.dependency_visualizer --config examples\test-config.csv \
+python -m src.dependency_visualizer --config examples\config-b.csv \
+  --output graph-b.svg
+python -m src.dependency_visualizer --config examples\config-c.csv \
+  --output graph-c.svg
+python -m src.dependency_visualizer --config examples\config-a.csv \
   --reverse D
-python -m src.dependency_visualizer --config examples\test-config.csv \
-  --graph --output graph-c.svg
+python -m src.dependency_visualizer --config examples\config-c.csv \
+  --graph
 ```
 
 Для реального пакета используется `examples/pypi-config.csv`:

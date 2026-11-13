@@ -30,7 +30,7 @@ CLI-инструмент строит граф зависимостей Python-�
 Зависимости Python не устанавливаются. Требуется Python 3.10 или новее.
 
 ```text
-run.bat examples\test-config.csv
+run.bat examples\config-a.csv
 python -m unittest discover -s tests -v
 ```
 
@@ -73,4 +73,5 @@ python -m src.dependency_visualizer --config examples\pypi-config.csv \
 Вывод сравнивается с `pip show` или `pipdeptree` по именам зависимостей; эти
 инструменты не используются программой. Различия могут возникать из-за
 маркеров окружения и optional extras, которые API публикует вместе с метаданными.
+
 

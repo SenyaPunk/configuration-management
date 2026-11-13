@@ -12,6 +12,7 @@ def parse_args(arguments: list[str] | None = None):
     parser.add_argument("--config", required=True, type=Path)
     parser.add_argument("--direct", action="store_true")
     parser.add_argument("--graph", action="store_true")
+    parser.add_argument("--reverse", metavar="PACKAGE")
     return parser.parse_args(arguments)
 
 
@@ -50,8 +51,13 @@ def main(arguments: list[str] | None = None) -> int:
             print("direct_dependencies=" + ",".join(
                 _direct_dependencies(config)
             ))
-        if args.graph:
-            _print_graph(_load_graph(config))
+        if args.graph or args.reverse:
+            graph = _load_graph(config)
+            if args.graph:
+                _print_graph(graph)
+            if args.reverse:
+                values = graph.reverse_dependencies(args.reverse)
+                print("reverse_dependencies=" + ",".join(values))
     except (ConfigError, SourceError, ValueError) as exc:
         print(f"Ошибка: {exc}", file=sys.stderr)
         return 2

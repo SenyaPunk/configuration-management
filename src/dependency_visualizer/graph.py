@@ -44,15 +44,17 @@ def build_graph(
         if known_depth is not None and known_depth <= depth:
             continue
         best_depth[package] = depth
+        if depth >= max_depth:
+            edges[package] = []
+            continue
         dependencies = _unique(provider(package))
         edges[package] = dependencies
         for dependency in dependencies:
             edges.setdefault(dependency, [])
-        if depth < max_depth:
-            stack.extend(
-                (dependency, depth + 1)
-                for dependency in reversed(dependencies)
-            )
+        stack.extend(
+            (dependency, depth + 1)
+            for dependency in reversed(dependencies)
+        )
     return DependencyGraph(edges)
 
 

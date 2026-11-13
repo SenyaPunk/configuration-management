@@ -1,0 +1,6 @@
+package,A
+repository,repository.csv
+test_mode,true
+version,1.0
+ascii_tree,true
+max_depth,3

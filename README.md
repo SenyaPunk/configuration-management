@@ -49,7 +49,7 @@ python -m unittest discover -s tests -v
 ## Примеры варианта 13
 
 Тестовый граф находится в `examples/repository.csv`, а конфигурация — в
-`examples/test-config.csv`. В нем показаны три пакета `A`, `B` и `C`, общий
+`examples/config-a.csv`, `examples/config-b.csv` и `examples/config-c.csv`. В них показаны три пакета `A`, `B` и `C`, общий
 пакет `D` и цикл `D->A`.
 
 ```text
@@ -73,3 +73,4 @@ python -m src.dependency_visualizer --config examples\pypi-config.csv \
 Вывод сравнивается с `pip show` или `pipdeptree` по именам зависимостей; эти
 инструменты не используются программой. Различия могут возникать из-за
 маркеров окружения и optional extras, которые API публикует вместе с метаданными.
+

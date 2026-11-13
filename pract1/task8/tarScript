@@ -1,3 +1,0 @@
-#!/bin/bash
-ext="$(printf '%s' "$1" | tr -d '.')"
-tar -cf "${ext}_archive.tar" -- *."${ext}"

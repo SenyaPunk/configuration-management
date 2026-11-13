@@ -1,2 +1,0 @@
-# Python comment
-print("Hello")

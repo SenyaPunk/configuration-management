@@ -1,2 +1,0 @@
-#!/bin/bash
-cat /etc/protocols | sort -rnk2 | grep -v "^#" | awk '{print $2, $1}' | head -n 5

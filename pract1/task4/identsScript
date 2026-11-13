@@ -1,2 +1,0 @@
-#!/bin/bash
-cat "$1" | grep -oE "[A-Za-z_$][A-Za-z0-9_$]*" | sort | uniq

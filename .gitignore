@@ -1,8 +1,12 @@
-1/
-*.pdf
 __pycache__/
 *.py[cod]
+.pytest_cache/
+.venv/
+venv/
+env/
+*.egg-info/
+graph.svg
+coverage.xml
+htmlcov/
 .idea/
 .vscode/
-*.swp
-*.tar

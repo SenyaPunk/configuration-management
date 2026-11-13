@@ -65,7 +65,7 @@ def load_config(path: Path) -> Config:
         if not row or not any(cell.strip() for cell in row):
             continue
         if len(row) != 2:
-            raise ConfigError(\n            f"строка {row_number} должна содержать два поля"\n        )
+            raise ConfigError(`n                f"строка {row_number} должна содержать два поля"`n            )
         key, value = (cell.strip() for cell in row)
         if row_number == 1 and key.lower() == "key" and value.lower() == "value":
             continue
@@ -104,4 +104,5 @@ def format_config(config: Config) -> str:
         ("max_depth", str(config.max_depth)),
     )
     return "\n".join(f"{key}={value}" for key, value in rows)
+
 

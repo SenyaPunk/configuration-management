@@ -74,7 +74,9 @@ def _dependency_name(value: str) -> str | None:
 
 def _api_url(repository: str, package: str, version: str | None) -> str:
     if "{package}" in repository or "{version}" in repository:
-        return repository.format(package=quote(package), version=quote(version or ""))
+        return repository.format(
+            package=quote(package), version=quote(version or "")
+        )
     if repository.rstrip("/").endswith("/json"):
         return repository
     suffix = f"/{quote(package)}"
@@ -90,7 +92,9 @@ def _read_json(url: str) -> dict[str, Any]:
     try:
         with urlopen(request, timeout=15) as response:
             payload = json.loads(response.read().decode("utf-8"))
-    except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+    except (
+        HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError
+    ) as exc:
         raise SourceError(f"не удалось получить {url}: {exc}") from exc
     if not isinstance(payload, dict):
         raise SourceError("ответ PyPI имеет неверный формат")
@@ -127,7 +131,9 @@ class PyPIProvider:
 
     def dependencies(self, package: str) -> list[str]:
         if package not in self.cache:
-            version = self.root_version if package == self.root_package else None
+            version = (
+                self.root_version if package == self.root_package else None
+            )
             self.cache[package] = fetch_pypi_dependencies(
                 self.repository, package, version
             )

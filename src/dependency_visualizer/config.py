@@ -52,7 +52,7 @@ def _validate_name(value: str) -> str:
     return value
 
 
-def load_config(path: Path) -> Config:
+def _read_values(path: Path) -> dict[str, str]:
     if not path.is_file():
         raise ConfigError(f"файл конфигурации не найден: {path}")
     values: dict[str, str] = {}
@@ -69,13 +69,19 @@ def load_config(path: Path) -> Config:
                 f"строка {row_number} должна содержать два поля"
             )
         key, value = (cell.strip() for cell in row)
-        if row_number == 1 and key.lower() == "key" and value.lower() == "value":
+        header = key.lower() == "key" and value.lower() == "value"
+        if row_number == 1 and header:
             continue
         if key not in KEYS:
             raise ConfigError(f"неизвестный параметр: {key}")
         if key in values:
             raise ConfigError(f"параметр задан повторно: {key}")
         values[key] = value
+    return values
+
+
+def load_config(path: Path) -> Config:
+    values = _read_values(path)
     missing = [key for key in KEYS if key not in values]
     if missing:
         raise ConfigError(f"отсутствуют параметры: {', '.join(missing)}")

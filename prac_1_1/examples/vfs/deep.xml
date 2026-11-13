@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vfs>
+  <file name="hello.txt">Привет из VFS!</file>
+  <file name=".hidden">hidden</file>
+  <file name="image.bin" encoding="base64">AAEC/w==</file>
+  <directory name="folder name"><file name="info.txt">Information</file></directory>
+  <directory name="home">
+    <directory name="student">
+      <file name="profile.txt">Student profile</file>
+      <directory name="docs">
+        <file name="lesson.txt">Third level file</file>
+        <directory name="empty" />
+      </directory>
+    </directory>
+  </directory>
+</vfs>
